@@ -488,9 +488,10 @@ option, or inferred from remotes."
                                 (beginning-of-buffer)
                                 (line-end-position)))
            (title (s-trim (buffer-substring-no-properties 1 end-of-first-line)))
-           (body (s-trim (buffer-substring-no-properties end-of-first-line (point-max)))))
-      (funcall magit-gh-pulls-editor-callback title body)
-      (magit-gh-pulls-pull-editor-quit))))
+           (body (s-trim (buffer-substring-no-properties end-of-first-line (point-max))))
+           (submission-res-status (funcall magit-gh-pulls-editor-callback title body)))
+      (when (= submission-res-status 201)
+        (magit-gh-pulls-pull-editor-quit)))))
 
 (defun magit-gh-pulls-pull-editor-quit ()
   "Cleanup the current pull request editor and restore
@@ -515,14 +516,17 @@ option, or inferred from remotes."
 (defun magit-gh-pulls-submit-pull-request (api user proj req)
   "Endpoint for creating a new pull request. Actually sends the
   PR creation API request to Github."
-  (let* ((a (gh-pulls-new api user proj req)))
-    (if (not (= (oref a :http-status) 201))
-        (message "Error creating pull-request: %s.  Have you pushed the branch to github?" (cdr (assoc "Status" (oref a :headers))))
+  (let* ((a (gh-pulls-new api user proj req))
+         (res-status (oref a :http-status)))
+    (if (not (= res-status 201))
+        (message "Error creating pull-request: %s.  Have you pushed the branch to github?"
+                 (cdr (assoc "Status" (oref a :headers))))
       (let ((url (oref (oref a :data) :html-url)))
         (message (concat "Created pull-request and copied URL to kill ring: " url))
         (when (member "--open-new-in-browser" (magit-gh-pulls-arguments))
           (browse-url url))
-        (kill-new url)))))
+        (kill-new url)))
+    res-status))
 
 (defun magit-gh-pulls-create-pull-request ()
   "Entrypoint for creating a new pull request."
